@@ -68,31 +68,20 @@ class IterativeSpeedometer : public Speedometer {
                     double d_bb = sqrt( (cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) + 
                         (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second) );
                     double velocity = d_bb / interval;
-                    PrintSpeed(stdout, velocity);
+                    PrintSpeed(stdout, object_id, velocity);
                     prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
+                    auto result = gst_structure_new_empty("Velocity");
+                    // gst_structure_set(result, "velocity", G_TYPE_INT, velocity,
+                    //      "id", G_TYPE_INT, object_id);
+                    // GstVideoRegionOfInterestMeta *meta = roi.meta();
+                    // gst_video_region_of_interest_meta_add_param(meta, result);
+
                 }
             }
+
             
         }
 
-
-        std::lock_guard<std::mutex> lock(mutex);
-        if (output == nullptr)
-            return false;
-        num_frames[element_name]++;
-        auto now = std::chrono::high_resolution_clock::now();
-        if (!last_time.time_since_epoch().count()) {
-            last_time = now;
-        }
-
-        double sec = std::chrono::duration_cast<seconds_double>(now - last_time).count();
-        if (sec >= interval) {
-            last_time = now;
-            PrintSpeed(output, sec);
-            num_frames.clear();
-            return true;
-        }
-        return false;
     }
     void EOS(FILE *) override {
     }
@@ -104,10 +93,10 @@ class IterativeSpeedometer : public Speedometer {
     std::map<std::string, int> num_frames;
     std::mutex mutex;
 
-    void PrintSpeed(FILE *output, double velocity) {
+    void PrintSpeed(FILE *output, int id, double velocity) {
 
         
-        fprintf(output, "Current speed = %f \n", velocity);
+        fprintf(output, "Current speed of id %d = %f \n", id, velocity);
 
     }
 };
