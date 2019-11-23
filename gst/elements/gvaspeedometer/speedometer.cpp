@@ -35,16 +35,32 @@ static std::mutex channels_mutex;
 class IterativeSpeedometer : public Speedometer {
   private:
         std::map<int, std::pair<int, int>> prev_centers_bb;
-        
+        std::map<int, std::vector<double>> velocities;
   public:
     IterativeSpeedometer(unsigned interval, bool print_each_stream = true)
         : interval(interval), print_each_stream(print_each_stream) {
             
     }
+    double CalcAverageSpeed(int object_id)
+    {
+        double res = 0;
+        auto velocity_vector = velocities[object_id];
+        for (auto vel : velocity_vector){
+            res += vel;
+        }
+        res /= velocity_vector.size();
+        return res;
+    }
+    void PrintAverageSpeed() {
+        for (auto object : velocities){
+            auto object_id = object.first;
+            auto avg_speed = CalcAverageSpeed(object_id);
+            fprintf(stdout, "Average speed of id %d = %f \n", object_id, avg_speed);
+        }
+
+    }
     bool NewFrame(const std::string &element_name, FILE *output, GstBuffer *buf) override {
-        // PrintSpeed(stdout, interval);
-        // //fprintf(stdout, "5 \n");
-        // //fprintf(stdout, "%d \n", interval);
+
         GVA::RegionOfInterestList roi_list(buf);
 
         for (GVA::RegionOfInterest &roi : roi_list) {
@@ -53,6 +69,7 @@ class IterativeSpeedometer : public Speedometer {
             int cur_y_center = roi.meta()->y + roi.meta()->h / 2;
             if ( prev_centers_bb.find(object_id) == prev_centers_bb.end() ) {
                 prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
+
             }
             else {
                 auto now = std::chrono::high_resolution_clock::now();
@@ -60,21 +77,26 @@ class IterativeSpeedometer : public Speedometer {
                     last_time = now;
                 }
 
-                double sec = std::chrono::duration_cast<seconds_double>(now - last_time).count();
+                gdouble sec = std::chrono::duration_cast<seconds_double>(now - last_time).count();
 
                 if (sec >= interval) {
                     last_time = now;
                     auto prev_bb = prev_centers_bb[object_id];
-                    double d_bb = sqrt( (cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) + 
+                    gdouble d_bb = sqrt( (cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) + 
                         (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second) );
-                    double velocity = d_bb / interval;
+                    gdouble velocity = d_bb / interval;
+                    velocities[object_id].push_back(velocity);
                     PrintSpeed(stdout, object_id, velocity);
+                    gdouble avg_speed = CalcAverageSpeed(object_id);
                     prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
                     auto result = gst_structure_new_empty("Velocity");
-                    // gst_structure_set(result, "velocity", G_TYPE_INT, velocity,
-                    //      "id", G_TYPE_INT, object_id);
-                    // GstVideoRegionOfInterestMeta *meta = roi.meta();
-                    // gst_video_region_of_interest_meta_add_param(meta, result);
+                    gst_structure_set(result, 
+                            "velocity", G_TYPE_DOUBLE, velocity,
+                            "id", G_TYPE_INT, object_id,
+                            "avg_velocity", G_TYPE_DOUBLE, avg_speed,
+                             NULL);
+                    GstVideoRegionOfInterestMeta *meta = roi.meta();
+                    gst_video_region_of_interest_meta_add_param(meta, result);
 
                 }
             }
