@@ -67,6 +67,8 @@ class IterativeSpeedometer : public Speedometer {
             int object_id = roi.meta()->id;
             int cur_x_center = roi.meta()->x + roi.meta()->w / 2;
             int cur_y_center = roi.meta()->y + roi.meta()->h / 2;
+            gdouble velocity = 0;
+            gdouble avg_speed = 0;
             if ( prev_centers_bb.find(object_id) == prev_centers_bb.end() ) {
                 prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
 
@@ -84,21 +86,33 @@ class IterativeSpeedometer : public Speedometer {
                     auto prev_bb = prev_centers_bb[object_id];
                     gdouble d_bb = sqrt( (cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) + 
                         (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second) );
-                    gdouble velocity = d_bb / interval;
+                    velocity = d_bb / interval;
                     velocities[object_id].push_back(velocity);
-                    PrintSpeed(stdout, object_id, velocity);
-                    gdouble avg_speed = CalcAverageSpeed(object_id);
+                    //PrintSpeed(stdout, object_id, velocity);
+                    
                     prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
-                    auto result = gst_structure_new_empty("Velocity");
-                    gst_structure_set(result, 
+                    
+                }
+                else if ( ! velocities[object_id].empty() )
+                {
+                    velocity = velocities[object_id].back();
+                    avg_speed = CalcAverageSpeed(object_id);
+                }
+                else
+                {
+                    avg_speed = 0;
+                }
+                
+                
+                auto result = gst_structure_new_empty("Velocity");
+                gst_structure_set(result, 
                             "velocity", G_TYPE_DOUBLE, velocity,
                             "id", G_TYPE_INT, object_id,
                             "avg_velocity", G_TYPE_DOUBLE, avg_speed,
-                             NULL);
-                    GstVideoRegionOfInterestMeta *meta = roi.meta();
-                    gst_video_region_of_interest_meta_add_param(meta, result);
+                                NULL);
+                GstVideoRegionOfInterestMeta *meta = roi.meta();
+                gst_video_region_of_interest_meta_add_param(meta, result);
 
-                }
             }
 
             
