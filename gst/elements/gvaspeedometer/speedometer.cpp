@@ -19,6 +19,8 @@
 #include <mutex>
 #include <math.h>
 
+#define UNUSED(x) (void)(x)
+
 class Speedometer {
   public:
     using seconds_double = std::chrono::duration<double>;
@@ -60,7 +62,8 @@ class IterativeSpeedometer : public Speedometer {
 
     }
     bool NewFrame(const std::string &element_name, FILE *output, GstBuffer *buf) override {
-
+        UNUSED(element_name);
+        UNUSED(output);
         GVA::RegionOfInterestList roi_list(buf);
 
         for (GVA::RegionOfInterest &roi : roi_list) {
@@ -114,10 +117,10 @@ class IterativeSpeedometer : public Speedometer {
                 gst_video_region_of_interest_meta_add_param(meta, result);
 
             }
-
+        
             
         }
-
+        return true;
     }
     void EOS(FILE *) override {
     }
