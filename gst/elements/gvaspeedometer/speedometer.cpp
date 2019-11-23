@@ -39,7 +39,7 @@ class IterativeSpeedometer : public Speedometer {
         std::map<int, std::pair<int, int>> prev_centers_bb;
         std::map<int, std::vector<double>> velocities;
   public:
-    IterativeSpeedometer(unsigned interval, bool print_each_stream = true)
+    IterativeSpeedometer(double interval, bool print_each_stream = true)
         : interval(interval), print_each_stream(print_each_stream) {
             
     }
@@ -126,7 +126,7 @@ class IterativeSpeedometer : public Speedometer {
     }
 
   protected:
-    unsigned interval;
+    double interval;
     bool print_each_stream;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
     std::map<std::string, int> num_frames;
@@ -151,7 +151,7 @@ void create_iterative_speedometer (const char *intervals) {
         for (const std::string &interval : intervals_list)
             if (not speedometers.count(interval)) {
                 std::shared_ptr<Speedometer> speedometer =
-                    std::shared_ptr<Speedometer>(new IterativeSpeedometer(std::stoi(interval)));
+                    std::shared_ptr<Speedometer>(new IterativeSpeedometer(std::stod(interval)));
                 speedometers.insert({interval, speedometer});
             }
     } catch (std::exception &e) {
