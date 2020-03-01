@@ -25,7 +25,7 @@ GST_DEBUG_CATEGORY_STATIC(gst_gva_speedometer_debug_category);
 
 enum { PROP_0, PROP_INTERVAL, PROP_SKIP_FRAMES };
 
-#define DEFAULT_INTERVAL "0.5"
+#define DEFAULT_INTERVAL "0.3"
 
 #define DEFAULT_SKIP_FRAMES 0
 #define DEFAULT_MIN_SKIP_FRAMES 0
