@@ -20,6 +20,11 @@
 #include <math.h>
 
 #define UNUSED(x) (void)(x)
+#define ALPHA 0.2
+#define ALPHA_HW 0.06
+#define BB_SIZE 4
+#define SPEED_THRESHOLD 90
+#define SPEEDLIMIT_VIOLATIONS 5
 
 class Speedometer {
   public:
@@ -37,7 +42,9 @@ static std::mutex channels_mutex;
 class IterativeSpeedometer : public Speedometer {
   private:
         std::map<int, std::pair<int, int>> prev_centers_bb;
+        std::map<int, std::array<unsigned int, BB_SIZE >> prev_bb;
         std::map<int, std::vector<double>> velocities;
+        std::map<int, int> violations;
   public:
     IterativeSpeedometer(double interval, bool print_each_stream = true)
         : interval(interval), print_each_stream(print_each_stream) {
@@ -47,11 +54,13 @@ class IterativeSpeedometer : public Speedometer {
     {
         double res = 0;
         auto velocity_vector = velocities[object_id];
-        for (auto vel : velocity_vector){
-            res += vel;
+        for (double vel : velocity_vector){
+            
+            res += 1.0 / vel;
         }
+        
         res /= velocity_vector.size();
-        return res;
+        return 1.0 / res;
     }
     void PrintAverageSpeed() {
         for (auto object : velocities){
@@ -68,38 +77,79 @@ class IterativeSpeedometer : public Speedometer {
 
         for (GVA::RegionOfInterest &roi : roi_list) {
             int object_id = roi.meta()->id;
-            int cur_x_center = roi.meta()->x + roi.meta()->w / 2;
-            int cur_y_center = roi.meta()->y + roi.meta()->h / 2;
+
+            
             gdouble velocity = 0;
             gdouble avg_speed = 0;
             if ( prev_centers_bb.find(object_id) == prev_centers_bb.end() ) {
+                // first detection
+                int cur_x_center = roi.meta()->x + roi.meta()->w / 2;
+                int cur_y_center = roi.meta()->y + roi.meta()->h / 2;
                 prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
-
+                std::array<unsigned int, BB_SIZE> prev_bb_coords = {roi.meta()->x, roi.meta()->y, roi.meta()->h, roi.meta()->w};
+                prev_bb[object_id] = prev_bb_coords;
+                violations[object_id] = 0;
+                
             }
             else {
+                // second and other detections
                 auto now = std::chrono::high_resolution_clock::now();
                 if (!last_time.time_since_epoch().count()) {
                     last_time = now;
                 }
+                auto prev_bb_coords = prev_bb[object_id];
 
+                auto new_x = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[0]) + ALPHA * (
+                             static_cast<double> (roi.meta()->x) - static_cast<double> (prev_bb_coords[0]) )  );
+                auto new_y = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[1]) + ALPHA * (
+                             static_cast<double> (roi.meta()->y) - static_cast<double> (prev_bb_coords[1]) )  );
+                auto new_h = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[2]) + ALPHA_HW * (
+                             static_cast<double> (roi.meta()->h) - static_cast<double> (prev_bb_coords[2]) )  );
+                auto new_w = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[3]) + ALPHA_HW * (
+                             static_cast<double> (roi.meta()->w) - static_cast<double> (prev_bb_coords[3]) )  );
+                roi.meta()->x = new_x;
+                roi.meta()->y = new_y;
+                roi.meta()->h = new_h;
+                roi.meta()->w = new_w;
+                prev_bb[object_id] = {new_x, new_y, new_h, new_w};
                 gdouble sec = std::chrono::duration_cast<seconds_double>(now - last_time).count();
 
                 if (sec >= interval) {
+                    
                     last_time = now;
+
                     auto prev_bb = prev_centers_bb[object_id];
+                    int cur_x_center = roi.meta()->x + roi.meta()->w / 2;
+                    int cur_y_center = roi.meta()->y + roi.meta()->h / 2;
+                    // auto cur_bb = std::pair<int, int> (cur_x_center, cur_y_center)
+                    // auto smothed_bb = std::pair<int, int> (prev_bb.first + ALPHA * (cur_x_center - prev_bb.first), 
+                    //         prev_bb.second + ALPHA * (cur_x_center - prev_bb.second) )
                     gdouble d_bb = sqrt( (cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) + 
                         (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second) );
+                    // gdouble d_bb = sqrt( (smothed_bb.first - prev_bb.first) * (smothed_bb.first - prev_bb.first) + 
+                    //      (smothed_bb.second - prev_bb.second) * (smothed_bb.second - prev_bb.second) );
                     velocity = d_bb / interval;
                     velocities[object_id].push_back(velocity);
                     //PrintSpeed(stdout, object_id, velocity);
-                    
                     prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
+                    avg_speed = CalcAverageSpeed(object_id);
+                    if (avg_speed >= SPEED_THRESHOLD)
+                    {   
+                        fprintf(stdout, "Average speed of id %d = %f \n", object_id, avg_speed);
+                        violations[object_id] += 1;
+                    }
+                    if (violations[object_id] >= SPEEDLIMIT_VIOLATIONS)
+                    {
+                        fprintf(stdout, "Warning! Id %d possibly violates speed limit \n", object_id);
+                    }
+
                     
                 }
                 else if ( ! velocities[object_id].empty() )
                 {
                     velocity = velocities[object_id].back();
                     avg_speed = CalcAverageSpeed(object_id);
+                    
                 }
                 else
                 {
