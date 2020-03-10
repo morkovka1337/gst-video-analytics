@@ -25,6 +25,10 @@ typedef struct _GstGvaSpeedometerClass GstGvaSpeedometerClass;
 struct _GstGvaSpeedometer {
     GstBaseTransform base_gvaSpeedometer;
     gchar *interval;
+    gchar *alpha;
+    gchar *alpha_hw;
+    gchar *speedlimit;
+    gchar *speedlimit_violations;
     guint skip_frames;
 };
 

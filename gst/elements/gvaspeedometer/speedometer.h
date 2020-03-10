@@ -13,7 +13,8 @@
 extern "C" {
 #endif
 
-void create_iterative_speedometer(const char *intervals);
+void create_iterative_speedometer(const char *intervals, const char *alphas, 
+            const char *alphas_hw, const char *speedlimits, const char *speedlimit_violationss);
 // void create_average_speedometer(unsigned int skip_frames);
 void speedometer_new_frame(GstBuffer *buf, const char *element_name);
 void speedometer_eos();

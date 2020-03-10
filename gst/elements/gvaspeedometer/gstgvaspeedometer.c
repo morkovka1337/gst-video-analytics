@@ -23,9 +23,13 @@
 GST_DEBUG_CATEGORY_STATIC(gst_gva_speedometer_debug_category);
 #define GST_CAT_DEFAULT gst_gva_speedometer_debug_category
 
-enum { PROP_0, PROP_INTERVAL, PROP_SKIP_FRAMES };
+enum { PROP_0, PROP_INTERVAL, PROP_SKIP_FRAMES, SPEEDLIMIT, ALPHA_, ALPHA_HW_, MAX_SPEEDL_VIOLS };
 
-#define DEFAULT_INTERVAL "0.3"
+#define DEFAULT_INTERVAL "0.1"
+#define DEFAULT_ALPHA "0.2"
+#define DEFAULT_ALPHA_HW "1.0"
+#define DEFAULT_SPEED_THRESHOLD "90"
+#define DEFAULT_SPEEDLIMIT_VIOLATIONS "15"
 
 #define DEFAULT_SKIP_FRAMES 0
 #define DEFAULT_MIN_SKIP_FRAMES 0
@@ -75,6 +79,22 @@ static void gst_gva_speedometer_class_init(GstGvaSpeedometerClass *klass) {
         gobject_class, PROP_INTERVAL,
         g_param_spec_string("interval", "Interval", "The time interval in seconds for which the fps will be measured",
                             DEFAULT_INTERVAL, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+    g_object_class_install_property(
+        gobject_class, ALPHA_,
+        g_param_spec_string("alpha", "Alpha", "Coefficient for exp smoothing",
+                            DEFAULT_ALPHA, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+    g_object_class_install_property(
+        gobject_class, ALPHA_HW_,
+        g_param_spec_string("alpha_hw", "Alpha_hw", "Coefficient for exp smoothing for height and width",
+                            DEFAULT_ALPHA_HW, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+    g_object_class_install_property(
+        gobject_class, SPEEDLIMIT,
+        g_param_spec_string("speed_threshold", "Speed_Threshold", "Limit of speed",
+                            DEFAULT_SPEED_THRESHOLD, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
+    g_object_class_install_property(
+        gobject_class, MAX_SPEEDL_VIOLS,
+        g_param_spec_string("sl_violations", "SL_violations", "Max number of speedlimit violations",
+                            DEFAULT_SPEEDLIMIT_VIOLATIONS, G_PARAM_WRITABLE | G_PARAM_STATIC_STRINGS));
     g_object_class_install_property(gobject_class, PROP_SKIP_FRAMES,
                                     g_param_spec_uint("skip-frames", "Skip frames",
                                                       "The number of frames that will be skipped before measuring fps",
@@ -86,6 +106,10 @@ static void gst_gva_speedometer_class_init(GstGvaSpeedometerClass *klass) {
 static void gst_gva_speedometer_init(GstGvaSpeedometer *gva_speedometer) {
     GST_DEBUG_OBJECT(gva_speedometer, "gva_speedometer_init");
     gva_speedometer->interval = g_strdup(DEFAULT_INTERVAL);
+    gva_speedometer->alpha = g_strdup(DEFAULT_ALPHA);
+    gva_speedometer->alpha_hw = g_strdup(DEFAULT_ALPHA_HW);
+    gva_speedometer->speedlimit = g_strdup(DEFAULT_SPEED_THRESHOLD);
+    gva_speedometer->speedlimit_violations = g_strdup(DEFAULT_SPEEDLIMIT_VIOLATIONS);
     gva_speedometer->skip_frames = DEFAULT_SKIP_FRAMES;
 }
 
@@ -96,6 +120,18 @@ void gst_gva_speedometer_get_property(GObject *object, guint property_id, GValue
     switch (property_id) {
     case PROP_INTERVAL:
         g_value_set_string(value, gvaspeedometer->interval);
+        break;
+    case ALPHA_:
+        g_value_set_string(value, gvaspeedometer->alpha);
+        break;
+    case ALPHA_HW_:
+        g_value_set_string(value, gvaspeedometer->alpha_hw);
+        break;
+    case SPEEDLIMIT:
+        g_value_set_string(value, gvaspeedometer->speedlimit);
+        break;
+    case MAX_SPEEDL_VIOLS:
+        g_value_set_string(value, gvaspeedometer->speedlimit_violations);
         break;
     case PROP_SKIP_FRAMES:
         g_value_set_uint(value, gvaspeedometer->skip_frames);
@@ -115,6 +151,18 @@ void gst_gva_speedometer_set_property(GObject *object, guint property_id, const 
     case PROP_INTERVAL:
         gvaspeedometer->interval = g_strdup(g_value_get_string(value));
         break;
+    case ALPHA_:
+        gvaspeedometer->alpha = g_strdup(g_value_get_string(value));
+        break;
+    case ALPHA_HW_:
+        gvaspeedometer->alpha_hw = g_strdup(g_value_get_string(value));
+        break;
+    case SPEEDLIMIT:
+        gvaspeedometer->speedlimit = g_strdup(g_value_get_string(value));
+        break;
+    case MAX_SPEEDL_VIOLS:
+        gvaspeedometer->speedlimit_violations = g_strdup(g_value_get_string(value));
+        break;
     case PROP_SKIP_FRAMES:
         gvaspeedometer->skip_frames = g_value_get_uint(value);
         break;
@@ -128,7 +176,9 @@ static gboolean gst_gva_speedometer_start(GstBaseTransform *trans) {
     GstGvaSpeedometer *gvaspeedometer = GST_GVA_SPEEDOMETER(trans);
     GST_DEBUG_OBJECT(gvaspeedometer, "start");
     // create_average_speedometer(gvaspeedometer->skip_frames);
-    create_iterative_speedometer(gvaspeedometer->interval);
+    create_iterative_speedometer(gvaspeedometer->interval, 
+            gvaspeedometer->alpha, gvaspeedometer->alpha_hw, 
+            gvaspeedometer->speedlimit,gvaspeedometer->speedlimit_violations);
     return TRUE;
 }
 

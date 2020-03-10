@@ -20,11 +20,9 @@
 #include <math.h>
 
 #define UNUSED(x) (void)(x)
-#define ALPHA 0.2
-#define ALPHA_HW 0.06
 #define BB_SIZE 4
-#define SPEED_THRESHOLD 90
-#define SPEEDLIMIT_VIOLATIONS 5
+
+//TODO: make config
 
 class Speedometer {
   public:
@@ -46,8 +44,10 @@ class IterativeSpeedometer : public Speedometer {
         std::map<int, std::vector<double>> velocities;
         std::map<int, int> violations;
   public:
-    IterativeSpeedometer(double interval, bool print_each_stream = true)
-        : interval(interval), print_each_stream(print_each_stream) {
+    IterativeSpeedometer(double interval, double alpha, double alpha_hw, 
+            double speedlimit, int speedlimit_violations, bool print_each_stream = true)
+        : interval(interval), alpha(alpha), alpha_hw(alpha_hw), speedlimit(speedlimit), speedlimit_violations(speedlimit_violations),
+         print_each_stream(print_each_stream) {
             
     }
     double CalcAverageSpeed(int object_id)
@@ -99,13 +99,13 @@ class IterativeSpeedometer : public Speedometer {
                 }
                 auto prev_bb_coords = prev_bb[object_id];
 
-                auto new_x = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[0]) + ALPHA * (
+                auto new_x = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[0]) + alpha * (
                              static_cast<double> (roi.meta()->x) - static_cast<double> (prev_bb_coords[0]) )  );
-                auto new_y = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[1]) + ALPHA * (
+                auto new_y = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[1]) + alpha * (
                              static_cast<double> (roi.meta()->y) - static_cast<double> (prev_bb_coords[1]) )  );
-                auto new_h = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[2]) + ALPHA_HW * (
+                auto new_h = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[2]) + alpha_hw * (
                              static_cast<double> (roi.meta()->h) - static_cast<double> (prev_bb_coords[2]) )  );
-                auto new_w = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[3]) + ALPHA_HW * (
+                auto new_w = static_cast<unsigned int> (static_cast<double> (prev_bb_coords[3]) + alpha_hw * (
                              static_cast<double> (roi.meta()->w) - static_cast<double> (prev_bb_coords[3]) )  );
                 roi.meta()->x = new_x;
                 roi.meta()->y = new_y;
@@ -133,12 +133,12 @@ class IterativeSpeedometer : public Speedometer {
                     //PrintSpeed(stdout, object_id, velocity);
                     prev_centers_bb[object_id] = std::pair<int, int> (cur_x_center, cur_y_center);
                     avg_speed = CalcAverageSpeed(object_id);
-                    if (avg_speed >= SPEED_THRESHOLD)
+                    if (avg_speed >= speedlimit)
                     {   
                         fprintf(stdout, "Average speed of id %d = %f \n", object_id, avg_speed);
                         violations[object_id] += 1;
                     }
-                    if (violations[object_id] >= SPEEDLIMIT_VIOLATIONS)
+                    if (violations[object_id] >= speedlimit_violations)
                     {
                         fprintf(stdout, "Warning! Id %d possibly violates speed limit \n", object_id);
                     }
@@ -177,6 +177,10 @@ class IterativeSpeedometer : public Speedometer {
 
   protected:
     double interval;
+    double alpha;
+    double alpha_hw;
+    double speedlimit;
+    int speedlimit_violations;
     bool print_each_stream;
     std::chrono::time_point<std::chrono::high_resolution_clock> last_time;
     std::map<std::string, int> num_frames;
@@ -194,16 +198,29 @@ class IterativeSpeedometer : public Speedometer {
 
 extern "C" {
 
-void create_iterative_speedometer (const char *intervals) {
+void create_iterative_speedometer (const char *intervals, const char *alphas, const char *alphas_hw, 
+        const char *speedlimits, const char *speedlimit_violationss) {
     try {
         std::lock_guard<std::mutex> lock(channels_mutex);
         std::vector<std::string> intervals_list = SplitString(intervals, ',');
-        for (const std::string &interval : intervals_list)
+        std::vector<std::string> alphas_list = SplitString(alphas, ',');
+        std::vector<std::string> alphas_hw_list = SplitString(alphas_hw, ',');
+        std::vector<std::string> speedlimits_list = SplitString(speedlimits, ',');
+        std::vector<std::string> speedlimit_violations_list = SplitString(speedlimit_violationss, ',');
+        for (unsigned counter = 0; counter < intervals_list.size(); counter++ ) {
+            //std::string &interval : intervals_list)
+            auto interval = intervals_list[counter];
+            auto alpha = alphas_list[counter];
+            auto alpha_hw = alphas_hw_list[counter];
+            auto speedlim = speedlimits_list[counter];
+            auto speedlim_viols = speedlimit_violations_list[counter];
             if (not speedometers.count(interval)) {
                 std::shared_ptr<Speedometer> speedometer =
-                    std::shared_ptr<Speedometer>(new IterativeSpeedometer(std::stod(interval)));
+                    std::shared_ptr<Speedometer>(new IterativeSpeedometer(std::stod(interval), std::stod(alpha),
+                        std::stod(alpha_hw), std::stod(speedlim), std::stoi(speedlim_viols)));
                 speedometers.insert({interval, speedometer});
             }
+        }
     } catch (std::exception &e) {
         std::string msg = std::string("Error during creation iterative speedometer: ") + e.what();
         GVA_ERROR(msg.c_str());
