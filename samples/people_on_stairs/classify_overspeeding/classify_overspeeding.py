@@ -12,7 +12,7 @@ from copy import copy
 MODEL_PATH = ("/root/Projects/models/intel/person-detection-retail-0013/FP32"
                 "/person-detection-retail-0013.xml")
 
-DATASET_PATH = "/root/Projects/train/"
+DATASET_PATH = "/root/Projects/augmented_dataset/augmented_videos/val"
 ALPHA = 0.1
 ALPHA_HW = 0.01
 RES_PATH = ("/root/Projects/gst-video-analytics-0.7.0/samples/"
