@@ -78,56 +78,58 @@ class IterativeSpeedometer : public Speedometer {
         GVA::VideoFrame frame(buf);
         for (auto &roi : frame.regions()) {
             int object_id = roi.object_id();
+            g_print("object_id = %d\n", object_id);
+            if (object_id > 1) {
+                GVA::Rect<uint32_t> bbox = roi.rect();
 
-            GVA::Rect<uint32_t> bbox = roi.rect();
+                gdouble velocity = 0;
+                gdouble avg_speed = 0;
+                if (prev_centers_bb.find(object_id) == prev_centers_bb.end()) {
+                    // first detection
+                    uint32_t cur_x_center = bbox.x + bbox.w / 2;
+                    uint32_t cur_y_center = bbox.y + bbox.h / 2;
+                    prev_centers_bb[object_id] = std::pair<uint32_t, uint32_t>(cur_x_center, cur_y_center);
+                    std::array<unsigned int, BB_SIZE> prev_bb_coords = {bbox.x, bbox.y, bbox.h, bbox.w};
+                    prev_bb[object_id] = prev_bb_coords;
+                    violations_num[object_id] = 0;
+                    violations[object_id] = false;
 
-            gdouble velocity = 0;
-            gdouble avg_speed = 0;
-            if (prev_centers_bb.find(object_id) == prev_centers_bb.end()) {
-                // first detection
-                uint32_t cur_x_center = bbox.x + bbox.w / 2;
-                uint32_t cur_y_center = bbox.y + bbox.h / 2;
-                prev_centers_bb[object_id] = std::pair<uint32_t, uint32_t>(cur_x_center, cur_y_center);
-                std::array<unsigned int, BB_SIZE> prev_bb_coords = {bbox.x, bbox.y, bbox.h, bbox.w};
-                prev_bb[object_id] = prev_bb_coords;
-                violations_num[object_id] = 0;
-                violations[object_id] = false;
+                } else {
+                    auto prev_bb_coords = prev_bb[object_id];
 
-            } else {
-                auto prev_bb_coords = prev_bb[object_id];
+                    auto new_x = static_cast<uint32_t>(
+                        static_cast<double>(prev_bb_coords[0]) +
+                        alpha * (static_cast<double>(bbox.x) - static_cast<double>(prev_bb_coords[0])));
+                    auto new_y = static_cast<uint32_t>(
+                        static_cast<double>(prev_bb_coords[1]) +
+                        alpha * (static_cast<double>(bbox.y) - static_cast<double>(prev_bb_coords[1])));
+                    auto new_h = static_cast<uint32_t>(
+                        static_cast<double>(prev_bb_coords[2]) +
+                        alpha_hw * (static_cast<double>(bbox.h) - static_cast<double>(prev_bb_coords[2])));
+                    auto new_w = static_cast<uint32_t>(
+                        static_cast<double>(prev_bb_coords[3]) +
+                        alpha_hw * (static_cast<double>(bbox.w) - static_cast<double>(prev_bb_coords[3])));
+                    bbox.x = new_x;
+                    bbox.y = new_y;
+                    bbox.h = new_h;
+                    bbox.w = new_w;
+                    prev_bb[object_id] = {new_x, new_y, new_h, new_w};
+                    auto prev_bb = prev_centers_bb[object_id];
+                    uint32_t cur_x_center = bbox.x + bbox.w / 2;
+                    uint32_t cur_y_center = bbox.y + bbox.h / 2;
+                    gdouble d_bb = sqrt((cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) +
+                                        (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second));
+                    velocity = d_bb / interval;
+                    // fprintf(stdout, "Before meta %f\n", velocity);
+                    // g_print("g_print %f\n", velocity);
+                    // velocities[object_id].push_back(velocity);
+                    prev_centers_bb[object_id] = std::pair<uint32_t, uint32_t>(cur_x_center, cur_y_center);
 
-                auto new_x = static_cast<uint32_t>(
-                    static_cast<double>(prev_bb_coords[0]) +
-                    alpha * (static_cast<double>(bbox.x) - static_cast<double>(prev_bb_coords[0])));
-                auto new_y = static_cast<uint32_t>(
-                    static_cast<double>(prev_bb_coords[1]) +
-                    alpha * (static_cast<double>(bbox.y) - static_cast<double>(prev_bb_coords[1])));
-                auto new_h = static_cast<uint32_t>(
-                    static_cast<double>(prev_bb_coords[2]) +
-                    alpha_hw * (static_cast<double>(bbox.h) - static_cast<double>(prev_bb_coords[2])));
-                auto new_w = static_cast<uint32_t>(
-                    static_cast<double>(prev_bb_coords[3]) +
-                    alpha_hw * (static_cast<double>(bbox.w) - static_cast<double>(prev_bb_coords[3])));
-                bbox.x = new_x;
-                bbox.y = new_y;
-                bbox.h = new_h;
-                bbox.w = new_w;
-                prev_bb[object_id] = {new_x, new_y, new_h, new_w};
-                auto prev_bb = prev_centers_bb[object_id];
-                uint32_t cur_x_center = bbox.x + bbox.w / 2;
-                uint32_t cur_y_center = bbox.y + bbox.h / 2;
-                gdouble d_bb = sqrt((cur_x_center - prev_bb.first) * (cur_x_center - prev_bb.first) +
-                                    (cur_y_center - prev_bb.second) * (cur_y_center - prev_bb.second));
-                velocity = d_bb / interval;
-                // fprintf(stdout, "Before meta %f\n", velocity);
-                // g_print("g_print %f\n", velocity);
-                // velocities[object_id].push_back(velocity);
-                prev_centers_bb[object_id] = std::pair<uint32_t, uint32_t>(cur_x_center, cur_y_center);
-
-                auto result_meta = roi.add_tensor("Velocity");
-                result_meta.set_double("velocity", velocity + VEL_EPS);
-                result_meta.set_int("id", object_id);
-                // result_meta.set_double("s", avg_speed);
+                    auto result_meta = roi.add_tensor("Velocity");
+                    result_meta.set_double("velocity", velocity + VEL_EPS);
+                    result_meta.set_int("id", object_id);
+                    // result_meta.set_double("s", avg_speed);
+                }
             }
         }
 
